@@ -2,27 +2,38 @@ package main
 
 import (
 	"context"
+	"log"
 	"os"
 	"time"
 
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
+	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials"
 
 	"github.com/ThreeDotsLabs/watermill-amazonsqs/connection"
 	"github.com/ThreeDotsLabs/watermill-amazonsqs/sqs"
 )
+
+const myTopic = "my-sqs-test"
 
 func main() {
 	ctx := context.Background()
 	logger := watermill.NewStdLogger(true, true)
 	cfg, err := awsconfig.LoadDefaultConfig(
 		context.Background(),
-		awsconfig.WithRegion("eu-north-1"),
-		connection.SetEndPoint(os.Getenv("AWS_SNS_ENDPOINT")),
+		awsconfig.WithRegion(os.Getenv("AWS_SQS_REGION")),
+		connection.SetEndPoint(os.Getenv("AWS_SQS_ENDPOINT")),
+		awsconfig.WithCredentialsProvider(credentials.StaticCredentialsProvider{
+			Value: aws.Credentials{
+				AccessKeyID:     os.Getenv("AWS_ACCESS_KEY"),
+				SecretAccessKey: os.Getenv("AWS_ACCESS_SECRET"),
+			},
+		}),
 	)
 	if err != nil {
-		panic(err)
+		log.Fatalf("LoadDefaultConfig() error: %v", err)
 	}
 	pub, err := sqs.NewPublisher(sqs.PublisherConfig{
 		AWSConfig:              cfg,
@@ -30,7 +41,7 @@ func main() {
 		Marshaler:              sqs.DefaultMarshalerUnmarshaler{},
 	}, logger)
 	if err != nil {
-		panic(err)
+		log.Fatalf("NewPublisher() error: %v", err)
 	}
 	_ = pub
 
@@ -40,31 +51,31 @@ func main() {
 		Unmarshaler:                  sqs.DefaultMarshalerUnmarshaler{},
 	}, logger)
 	if err != nil {
-		panic(err)
+		log.Fatalf("NewSubscriber() error: %v", err)
 	}
 
-	err = sub.SubscribeInitialize("any-topic")
+	err = sub.SubscribeInitialize(myTopic)
 	if err != nil {
-		panic(err)
+		log.Printf("SubscribeInitialize() error: %v", err)
 	}
 
-	messages, err := sub.Subscribe(ctx, "any-topic")
+	messages, err := sub.Subscribe(ctx, myTopic)
 	if err != nil {
-		panic(err)
+		log.Fatalf("Subscribe() error: %v", err)
 	}
 
 	go func() {
 		for m := range messages {
-			logger.With(watermill.LogFields{"message": m}).Info("Received message", nil)
+			logger.Info("Received message", watermill.LogFields{"UUID": m.UUID, "Metadata": m.Metadata, "Payload": string(m.Payload)})
 			m.Ack()
 		}
 	}()
 
 	for {
 		msg := message.NewMessage(watermill.NewULID(), []byte(`{"some_json": "body"}`))
-		err := pub.Publish("any-topic", msg)
+		err := pub.Publish(myTopic, msg)
 		if err != nil {
-			panic(err)
+			log.Fatalf("Publish() error: %v", err)
 		}
 		time.Sleep(time.Second)
 	}
