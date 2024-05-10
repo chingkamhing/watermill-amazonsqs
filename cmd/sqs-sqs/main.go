@@ -12,7 +12,6 @@ import (
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 
-	"github.com/ThreeDotsLabs/watermill-amazonsqs/connection"
 	"github.com/ThreeDotsLabs/watermill-amazonsqs/sqs"
 )
 
@@ -24,7 +23,6 @@ func main() {
 	cfg, err := awsconfig.LoadDefaultConfig(
 		context.Background(),
 		awsconfig.WithRegion(os.Getenv("AWS_SQS_REGION")),
-		connection.SetEndPoint(os.Getenv("AWS_SQS_ENDPOINT")),
 		awsconfig.WithCredentialsProvider(credentials.StaticCredentialsProvider{
 			Value: aws.Credentials{
 				AccessKeyID:     os.Getenv("AWS_ACCESS_KEY"),
@@ -56,7 +54,7 @@ func main() {
 
 	err = sub.SubscribeInitialize(myTopic)
 	if err != nil {
-		log.Printf("SubscribeInitialize() error: %v", err)
+		log.Fatalf("SubscribeInitialize() error: %v", err)
 	}
 
 	messages, err := sub.Subscribe(ctx, myTopic)
